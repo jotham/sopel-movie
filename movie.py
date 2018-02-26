@@ -1,43 +1,59 @@
-import re, requests, sopel
+from __future__ import print_function
+import re, requests, os
 
-API_KEY='' # TODO - Bot Config file
+API_KEY_PATH = '~/.tmdb'
+BASE_URL = 'https://api.themoviedb.org/3/search/multi?api_key={}&query={}'
 
-@sopel.module.commands('movie', 'imdb')
-def movie(bot, trigger):
+def imdb_search(api_key, title):
     """
-    Returns some information about a movie, like Title, Year, Rating, Genre and IMDB Link.
+    Returns some information about a movie or TV show, like Title, Year, Rating, Genre and IMDB Link.
     """
-    if not trigger.group(2):
-        return
-    word = trigger.group(2).rstrip()
-    uri = "https://api.themoviedb.org/3/search/movie"
-    data = requests.get(uri, params={'api_key': API_KEY, 'query': word}, timeout=30).json()
-
-    if len(data['results']) == 0:
-        try:
-            LOGGER.warning(
-                'Got an error from TMDb: {}; data was {}'.format(word, str(data)))
-            # this will fuck up
-            message = "[MOVIE] Got an error from TMDb: {}".format(data['status_message'])
-        except KeyError as err:
-            message = "[MOVIE] Couldn\'t find {}".format(word)
+    query = requests.get(BASE_URL.format(api_key, title)).json()
+    if 'results' not in query or not query:
+        return None
+    elif query['results'] == 0:
+        return None
     else:
-        # Another request is made with TMDb's ID for the movie
-        # If we've made it this far then there \shouldn't\ be any errors
-        result_pos = 0
-        for position in range(0, len(data['results'])):
-            movie = data['results'][position]['original_title']
-            m = re.search(r'{}$'.format(word), movie)
-            if m:
-                result_pos = position
-                break
+        id_search_url = "https://api.themoviedb.org/3/{}/{}?api_key={}"
+        info = requests.get(id_search_url.format(query['results'][0]['media_type'],
+                                                query['results'][0]['id'],
+                                                 api_key)).json()
+        if query['results'][0]['media_type'] is 'movie':
+            return [info['original_title'], info['release_date'], info['vote_average'],
+                    'https://imdb.com/title/' + info['imdb_id'], info['overview']]
+        else:
+            return [info['original_name'], info['first_air_date'], info['vote_average'],
+                    'Episodes: ' + str(info['episode_run_time'][0]), info['overview']]
 
-        id_search_url = "https://api.themoviedb.org/3/movie/{}"
-        movie = requests.get(id_search_url.format(data['results'][result_pos]['id']),
-                                params={'api_key': API_KEY}, timeout=30).json()
 
-        message = '{} ({}) Rating: {} — http://imdb.com/title/{} — {}'.format(
-                movie['original_title'], movie['release_date'], movie['vote_average'],
-                movie['imdb_id'], movie['overview'])
-    bot.say(message)
+try:
+    import sopel.module
+except ImportError:
+    # Probably running from commandline
+    pass
+else:
+    @sopel.module.commands('imdb')
+    @sopel.module.example('.imdb The Martian')
+    def f_imdb(bot, trigger):
+        query = trigger.group(2).strip()
+        results = imdb_search(bot.config.tmdb.api_key, query)
+        bot.say(imdb_search(query))
 
+
+if __name__ == '__main__':
+    import sys
+    try:
+        api_key = open(os.path.expanduser(API_KEY_PATH), 'r').read().strip()
+    except FileNotFoundError:
+        print('Can\'t get API key in ' + API_KEY_PATH)
+        sys.exit(1)
+    else:
+        query = 'The Martian'
+        if len(sys.argv) > 1:
+            query = ' '.join(sys.argv[1:])
+        print('Looking up "{}"'.format(query))
+        results = imdb_search(api_key, query)
+        if results:
+            print('{} ({}) Rating: {} —{} —{}'.format(*results))
+        else:
+            print('Couldn\'t find anything for "{}"'.format(query))
