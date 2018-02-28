@@ -11,19 +11,30 @@ def imdb_search(api_key, title):
     query = requests.get(BASE_URL.format(api_key, title)).json()
     if 'results' not in query or not query:
         return None
-    elif query['results'] == 0:
+    elif len(query['results']) == 0:
         return None
     else:
         id_search_url = "https://api.themoviedb.org/3/{}/{}?api_key={}"
-        info = requests.get(id_search_url.format(query['results'][0]['media_type'],
+        info = requests.get(id_search_url.format(
+                                                query['results'][0]['media_type'],
                                                 query['results'][0]['id'],
-                                                 api_key)).json()
-        if query['results'][0]['media_type'] is 'movie':
-            return [info['original_title'], info['release_date'], info['vote_average'],
-                    'https://imdb.com/title/' + info['imdb_id'], info['overview']]
+                                                api_key)).json()
+        if query['results'][0]['media_type'] == 'movie':
+            response = '{} ({}) Rating: {} —https://imdb.com/title/{} —{}'.format(
+                                                 info['original_title'],
+                                                 info['release_date'],
+                                                 info['vote_average'],
+                                                 info['imdb_id'],
+                                                 info['overview'])
+            return response
         else:
-            return [info['original_name'], info['first_air_date'], info['vote_average'],
-                    'Episodes: ' + str(info['episode_run_time'][0]), info['overview']]
+            response = '{} ({}) Rating: {} Episodes: {} —{}'.format(
+                                                info['original_name'],
+                                                info['first_air_date'],
+                                                info['vote_average'],
+                                                info['episode_run_time'][0],
+                                                info['overview'])
+            return response
 
 
 try:
@@ -37,7 +48,8 @@ else:
     def f_imdb(bot, trigger):
         query = trigger.group(2).strip()
         results = imdb_search(bot.config.tmdb.api_key, query)
-        bot.say(imdb_search(query))
+        if results:
+            bot.say(results)
 
 
 if __name__ == '__main__':
@@ -54,6 +66,6 @@ if __name__ == '__main__':
         print('Looking up "{}"'.format(query))
         results = imdb_search(api_key, query)
         if results:
-            print('{} ({}) Rating: {} —{} —{}'.format(*results))
+            print(results)
         else:
             print('Couldn\'t find anything for "{}"'.format(query))
