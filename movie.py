@@ -4,7 +4,7 @@ import re, requests, os
 API_KEY_PATH = '~/.tmdb'
 BASE_URL = 'https://api.themoviedb.org/3/search/multi?api_key={}&query={}'
 
-def imdb_search(api_key, title):
+def movie_lookup(api_key, title):
     """
     Returns some information about a movie or TV show, like Title, Year, Rating, Genre and IMDB Link.
     """
@@ -43,14 +43,20 @@ except ImportError:
     # Probably running from commandline
     pass
 else:
-    @sopel.module.commands('imdb')
-    @sopel.module.example('.imdb The Martian')
-    def f_imdb(bot, trigger):
-        query = trigger.group(2).strip()
-        results = imdb_search(bot.config.tmdb.api_key, query)
-        if results:
-            bot.say(results)
-
+    @sopel.module.commands('movie', 'imdb', 'tmdb')
+    @sopel.module.example('.movie The Martian')
+    def f_movie_lookup(bot, trigger):
+        """Look up the details of a movie in TMDB"""
+        if trigger.group(2):
+            api_key = open(os.path.expanduser(API_KEY_PATH), 'r').read().strip()
+            # api_key = bot.config.tmdb.api_key
+            query = re.sub('[^a-zA-Z ]', '', trigger.group(2)).strip()
+            details = movie_lookup(api_key, query)
+            if details is not None:
+                bot.say(details, trigger.sender, len(details)*2)
+            else:
+                bot.say('Couldn\'t find anything for "{}".'.format(query), trigger.sender)
+        return sopel.module.NOLIMIT
 
 if __name__ == '__main__':
     import sys
@@ -64,8 +70,8 @@ if __name__ == '__main__':
         if len(sys.argv) > 1:
             query = ' '.join(sys.argv[1:])
         print('Looking up "{}"'.format(query))
-        results = imdb_search(api_key, query)
-        if results:
-            print(results)
+        details = movie_lookup(api_key, query)
+        if details is not None:
+            print(details)
         else:
             print('Couldn\'t find anything for "{}"'.format(query))
